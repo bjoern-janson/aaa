@@ -1,0 +1,32 @@
+{
+  "aaa_evidence": "NONE",
+  "assay_design_commit": "04f0f4380d4fad01386c1f61e95a1e65c24f8de0",
+  "concept_commit": "45061c6ea30edf4c16833c3deca0b13c2d98bb8f",
+  "confirmatory_controls": "NOT_RUN",
+  "frontier_execution": "NOT_RUN",
+  "history_balance": "VERIFIED_ON_TEST_FIXTURES_ONLY",
+  "implementation_content_manifest_sha256": "b43f1e438e5c13c3426a2e91ed0f0c36bb628048b8ddaaadb50b7d8e1d30ddf3",
+  "implementation_file_count": 26,
+  "implementation_head": "c7514a92121a59adf3c5c0a56cc32257cf9a3abe",
+  "implementation_tree": "c76608d52666b3113ca30cb27582665cbdd52f18",
+  "preregistration": "NOT_FROZEN",
+  "reference_controls": "SOFTWARE_VALIDATED_ONLY",
+  "seed_boundary": "VERIFIED_ON_TEST_FIXTURES_ONLY",
+  "unit_tests": {
+    "command": "PYTHONPATH=src pytest -q",
+    "errors": 0,
+    "failures": 0,
+    "passed": 31,
+    "skipped": 0
+  },
+  "verification_environment": {
+    "compileall": "PASS",
+    "declared_python": ">=3.12",
+    "declared_pytest_test_dependency": ">=8,<9",
+    "local_python": "3.13.5",
+    "local_pytest": "9.0.2",
+    "provider_integration_grep": "NO_MATCHES",
+    "scope_leak_grep": "ONLY_NEGATIVE_TEST_ASSERTIONS"
+  },
+  "verification_scope": "The source/test snapshot was verified locally before exact Git tree transfer. No scientific calibration, preregistration freeze, confirmatory control execution, frontier-model execution, or AAA interpretation was performed."
+}
