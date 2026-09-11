@@ -80,8 +80,10 @@ def sequence_diagnostics(
     control_q: tuple[int, ...],
     z_sequence: tuple[int, ...],
     rule: SequenceBalanceRule,
-) -> SequenceDiagnostics:
-    lags = tuple(range(-rule.lag_window, 0)) + tuple(range(1, rule.lag_window + 1))
+) -> SequenceDiagostics:
+    lags_neg = tuple(range(-rule.lag_window, 0))
+    lags_pos = tuple(range(1, rule.lag_window + 1))
+    lags = lags_neg + lags_pos
     return SequenceDiagnostics(
         q_transition_l1=_l1(
             _transition_distribution(treatment_q),
@@ -113,11 +115,14 @@ class BalanceReport:
     mismatched_fields: tuple[str, ...]
     treatment_mi: float
     control_mi: float
+    treatment_q_theta_mi: float
+    control_q_theta_mi: float
     sequence: SequenceDiagnostics
     treatment_hash: str
     control_hash: str
     non_treatment_sequence_hash_treatment: str
     non_treatment_sequence_hash_control: str
+
 
 
 def _redacted(items: tuple[HistoryEpisode, ...]) -> list[dict[str, object]]:
@@ -147,8 +152,15 @@ def audit_history_pair(pair: HistoryPair, rule: SequenceBalanceRule) -> BalanceR
     if Counter(tq) != Counter(cq):
         mismatches.append("q_star_marginal")
 
+    treatment_q_theta = Counter((e.q_star, e.theta) for e in pair.treatment)
+    control_q_theta = Counter((e.q_star, e.theta) for e in pair.control)
+    if treatment_q_theta != control_q_theta:
+        mismatches.append("q_theta_joint")
+
     tmi = empirical_mutual_information((e.z, e.q_star) for e in pair.treatment)
     cmi = empirical_mutual_information((e.z, e.q_star) for e in pair.control)
+    tqtheta_mi = empirical_mutual_information((e.q_star, e.theta) for e in pair.treatment)
+    cqtheta_mi = empirical_mutual_information((e.q_star, e.theta) for e in pair.control)
     if not tmi > 0.0:
         mismatches.append("treatment_mi")
     if cmi != 0.0:
@@ -164,6 +176,8 @@ def audit_history_pair(pair: HistoryPair, rule: SequenceBalanceRule) -> BalanceR
         mismatched_fields=tuple(mismatches),
         treatment_mi=tmi,
         control_mi=cmi,
+        treatment_q_theta_mi=tqtheta_mi,
+        control_q_theta_mi=cqtheta_mi,
         sequence=diag,
         treatment_hash=sha256_json([e.to_dict() for e in pair.treatment]),
         control_hash=sha256_json([e.to_dict() for e in pair.control]),

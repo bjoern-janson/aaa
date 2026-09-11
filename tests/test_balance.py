@@ -19,6 +19,8 @@ def test_balance_audit_accepts_valid_pair():
     assert report.mismatched_fields == ()
     assert report.treatment_mi > 0.0
     assert report.control_mi == 0.0
+    assert report.treatment_q_theta_mi == 0.0
+    assert report.control_q_theta_mi == 0.0
 
 
 def test_redacted_histories_are_byte_identical():
@@ -55,3 +57,26 @@ def test_balance_audit_rejects_theta_resource_and_order_mutations():
         report = audit_history_pair(bad, rule)
         assert not report.ok
         assert expected in report.mismatched_fields
+
+
+def test_balance_audit_rejects_secondary_q_theta_regularities():
+    pair, rule = _pair()
+    control = list(pair.control)
+    swap = None
+    for i, left in enumerate(control):
+        for j in range(i + 1, len(control)):
+            right = control[j]
+            if left.z == right.z and left.theta != right.theta and left.q_star != right.q_star:
+                swap = (i, j)
+                break
+        if swap is not None:
+            break
+    assert swap is not None
+    i, j = swap
+    qi, qj = control[i].q_star, control[j].q_star
+    control[i] = replace(control[i], q_star=qj)
+    control[j] = replace(control[j], q_star=qi)
+    bad = HistoryPair(pair.treatment, tuple(control), pair.treatment_phi)
+    report = audit_history_pair(bad, rule)
+    assert not report.ok
+    assert "q_theta_joint" in report.mismatched_fields

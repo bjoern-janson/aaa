@@ -3,7 +3,7 @@ import pytest
 from aaa_v0.agents import FixedMetaAgent
 from aaa_v0.contracts import AssayConfig, SequenceBalanceRule
 from aaa_v0.runner import ProtocolStop, assert_match_gate, run_reference_pair
-from aaa_v0.serialization import canonical_json_bytes
+from aaa_v0.serialization import canonical_json_bytes, sha256_json
 
 
 def test_match_gate_is_per_family_and_fails_closed():
@@ -22,7 +22,10 @@ def test_reference_run_is_deterministic_and_future_seed_only_changes_future_outp
     c = run_reference_pair(cfg, rule, history_seed=17, future_seed=102, agent_cls=FixedMetaAgent, match_tolerance=0.0)
     assert canonical_json_bytes(a.to_dict()) == canonical_json_bytes(b.to_dict())
     assert a.config_hash == c.config_hash
+    assert a.sequence_balance_rule_hash == sha256_json(rule.__dict__)
     assert a.history_pair_hash == c.history_pair_hash
+    assert a.history_seed_identity == c.history_seed_identity
+    assert a.future_seed_identity != c.future_seed_identity
     assert a.raw_trial_records_hash != c.raw_trial_records_hash
     assert a.future_seed_commitment != c.future_seed_commitment
 

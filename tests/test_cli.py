@@ -59,9 +59,17 @@ def test_cli_surface_has_only_approved_workflow_and_rejects_frontier_command():
 def test_audit_history_writes_manifested_balanced_output(tmp_path):
     cfg_path, seq_path, _ = _fixtures(tmp_path)
     out = tmp_path / "audit"
-    _run("audit-history", "--config", str(cfg_path), "--sequence-rule", str(seq_path), "--history-seed", "17", "--output-dir", str(out))
+    _run(
+        "audit-history",
+        "--config", str(cfg_path),
+        "--sequence-rule", str(seq_path),
+        "--history-seed", "17",
+        "--output-dir", str(out),
+    )
     payload = json.loads((out / "history_audit.json").read_text())
     assert payload["status"] == "BALANCED"
+    assert payload["treatment_q_theta_mi"] == 0.0
+    assert payload["control_q_theta_mi"] == 0.0
     manifest = json.loads((out / "MANIFEST.json").read_text())
     assert "history_audit.json" in manifest
 
@@ -80,6 +88,9 @@ def test_full_offline_control_workflow_is_manifested_and_unscored(tmp_path):
     exploratory = json.loads((cal / "exploratory_calibration.json").read_text())
     assert exploratory["status"] == "EXPLORATORY_UNSCORED"
     assert exploratory["aaa_evidence"] == "NONE"
+    raw_line = json.loads((cal / "raw_control_runs.jsonl").read_text().splitlines()[0])
+    assert raw_line["raw_trial_records"]
+    assert raw_line["bundle"]["raw_trial_records_hash"]
 
     frozen = tmp_path / "frozen"
     _run(
@@ -89,7 +100,7 @@ def test_full_offline_control_workflow_is_manifested_and_unscored(tmp_path):
         "--confirmatory-history-seeds", "18",
         "--confirmatory-future-seeds", "102",
         "--output-dir", str(frozen),
-    )
+   )
     prereg = json.loads((frozen / "preregistration.json").read_text())
     assert prereg["spec_commit"] == SPEC_COMMIT
     expected_hash = hashlib.sha256((frozen / "preregistration.json").read_bytes()).hexdigest()
@@ -105,5 +116,8 @@ def test_full_offline_control_workflow_is_manifested_and_unscored(tmp_path):
     assert result["status"] == "CONTROL_VALIDATED"
     assert result["aaa_evidence"] == "NONE"
     assert result["preregistration_hash"]
+    confirmatory_raw = json.loads((validated / "confirmatory_control_runs.jsonl").read_text().splitlines()[0])
+    assert confirmatory_raw["raw_trial_records"]
     manifest = json.loads((validated / "MANIFEST.json").read_text())
     assert "confirmatory_controls.json" in manifest
+    assert "confirmatory_control_runs.jsonl" in manifest

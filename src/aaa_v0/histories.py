@@ -29,29 +29,40 @@ def make_history_pair(
     phi_rng = _rng(seed, "history-phi")
     treatment_phi = tuple(int(x) for x in phi_rng.permutation(config.q_count))
 
-    z_values = []
-    for z in range(config.z_count):
-        z_values.extend([z] * (config.history_repeats * config.q_count))
-    z_values = np.array(z_values, dtype=int)
-    order = _rng(seed, "history-order").permutation(len(z_values))
-    z_ordered = tuple(int(x) for x in z_values[order])
-
+    # Build an exactly balanced (z, theta) shell. This prevents the q* treatment
+    # from accidentally introducing a second q*--theta regularity in passive history.
+    per_theta_per_z = (config.history_repeats * config.q_count) // config.theta_count
     theta_rng = _rng(seed, "history-theta")
-    thetas = tuple(int(x) for x in theta_rng.integers(0, config.theta_count, len(z_ordered)))
+    shells: list[tuple[int, int]] = []
+    for z in range(config.z_count):
+        theta_multiset = np.repeat(np.arange(config.theta_count), per_theta_per_z)
+        for theta in theta_rng.permutation(theta_multiset):
+            shells.append((z, int(theta)))
+    order = _rng(seed, "history-order").permutation(len(shells))
+    ordered_shells = tuple(shells[int(i)] for i in order)
+    z_ordered = tuple(z for z, _ in ordered_shells)
+    thetas = tuple(theta for _, theta in ordered_shells)
+
     surface_rng = _rng(seed, "history-surface")
     surface_seeds = tuple(int(x) for x in surface_rng.integers(0, 2**31 - 1, len(z_ordered)))
 
     treatment_q = tuple(treatment_phi[z] for z in z_ordered)
-    positions_by_z = {
-        z: [i for i, observed_z in enumerate(z_ordered) if observed_z == z]
+    positions_by_z_theta = {
+        (z, theta): [
+            i
+            for i, (observed_z, observed_theta) in enumerate(ordered_shells)
+            if observed_z == z and observed_theta == theta
+        ]
         for z in range(config.z_count)
+        for theta in range(config.theta_count)
     }
+    q_repeats_per_stratum = config.history_repeats // config.theta_count
     control_rng = _rng(seed, "history-control-q")
 
     for _ in range(sequence_rule.max_search_attempts):
         control_q_list = [0] * len(z_ordered)
-        for z, positions in positions_by_z.items():
-            multiset = np.repeat(np.arange(config.q_count), config.history_repeats)
+        for positions in positions_by_z_theta.values():
+            multiset = np.repeat(np.arange(config.q_count), q_repeats_per_stratum)
             shuffled = control_rng.permutation(multiset)
             for pos, q in zip(positions, shuffled, strict=True):
                 control_q_list[pos] = int(q)

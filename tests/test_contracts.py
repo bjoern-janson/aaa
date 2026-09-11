@@ -16,6 +16,17 @@ def test_assay_config_is_frozen_and_canonical():
         cfg.z_count = 99
 
 
+def test_assay_config_rejects_degenerate_or_unbalanceable_v0_shapes():
+    with pytest.raises(ValueError, match="two context/probe"):
+        AssayConfig(1, 1, 4, 8, 32, 4, 8)
+    with pytest.raises(ValueError, match="two target"):
+        AssayConfig(4, 4, 1, 8, 32, 4, 8)
+    with pytest.raises(ValueError, match="history_repeats"):
+        AssayConfig(4, 4, 3, 8, 32, 4, 8)
+    with pytest.raises(ValueError, match="post-change"):
+        AssayConfig(4, 4, 4, 8, 8, 4, 8)
+
+
 def test_history_episode_serializes_declared_fields():
     ep = HistoryEpisode(
         episode_id="h-000",

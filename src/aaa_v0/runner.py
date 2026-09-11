@@ -27,6 +27,10 @@ class ProtocolStop(RuntimeError):
         super().__init__(message or code)
 
 
+def _seed_identity(kind: str, seed: int) -> str:
+    return sha256_json({"kind": kind, "seed": int(seed)})
+
+
 @dataclass(frozen=True)
 class MatchReport:
     treatment: tuple[tuple[str, float], ...]
@@ -70,7 +74,11 @@ def assert_match_gate(
 
 @dataclass(frozen=True)
 class RunBundle:
+    agent_name: str
     config_hash: str
+    sequence_balance_rule_hash: str
+    history_seed_identity: str
+    future_seed_identity: str
     history_pair_hash: str
     balance_report: BalanceReport
     terminal_snapshot_hash: str
@@ -87,7 +95,11 @@ class RunBundle:
 
     def to_dict(self) -> dict[str, object]:
         return {
+            "agent_name": self.agent_name,
             "config_hash": self.config_hash,
+            "sequence_balance_rule_hash": self.sequence_balance_rule_hash,
+            "history_seed_identity": self.history_seed_identity,
+            "future_seed_identity": self.future_seed_identity,
             "history_pair_hash": self.history_pair_hash,
             "balance_report": asdict(self.balance_report),
             "terminal_snapshot_hash": self.terminal_snapshot_hash,
@@ -224,6 +236,7 @@ def run_reference_pair(
     control_state_hash = sha256_json(terminal_control.state_dict())
     history_pair_hash = sha256_json(_history_pair_dict(pair))
     config_hash = sha256_json(config.to_dict())
+    sequence_balance_rule_hash = sha256_json(asdict(sequence_rule))
 
     terminal_preferred = {
         context_signature(z, config.z_count): terminal_treatment.preferred_probe(context_signature(z, config.z_count))
@@ -277,7 +290,11 @@ def run_reference_pair(
     d3_control = compute_learning_curve(raw_records, condition="control", family="D3")
 
     return RunBundle(
+        agent_name=terminal_treatment.name,
         config_hash=config_hash,
+        sequence_balance_rule_hash=sequence_balance_rule_hash,
+        history_seed_identity=_seed_identity("history", history_seed),
+        future_seed_identity=_seed_identity("future", future_seed),
         history_pair_hash=history_pair_hash,
         balance_report=balance,
         terminal_snapshot_hash=snapshot.snapshot_hash,

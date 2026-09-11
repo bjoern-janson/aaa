@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 
 import pytest
 
@@ -28,6 +29,14 @@ def _rules():
         TransferRule(min_positive_budget_points=1, min_mean_delta=0.01, max_zero_budget_abs_delta=0.0),
         RecoveryRule(max_post_change_old_rule_adherence=0.50, min_post_change_competence=0.99, evaluation_start_offset=4),
     )
+
+
+def _bundles(cfg, seq):
+    return {
+        "LOCAL": run_reference_pair(cfg, seq, 17, 101, LocalAgent, 0.0),
+        "FIXED_META": run_reference_pair(cfg, seq, 17, 101, FixedMetaAgent, 0.0),
+        "REVISING_META": run_reference_pair(cfg, seq, 17, 101, RevisingMetaAgent, 0.0),
+    }
 
 
 def test_preregistration_roundtrip_and_identity_are_stable():
@@ -67,14 +76,9 @@ def test_confirmatory_reference_signature_matches_required_matrix():
     cfg, seq = _config_and_rule()
     d1, d2, d3 = _rules()
     prereg = freeze_preregistration(cfg, seq, d1, d2, d3, (), (17,), (101,), SPEC_COMMIT)
-    bundles = {
-        "LOCAL": run_reference_pair(cfg, seq, 17, 101, LocalAgent, 0.0),
-        "FIXED_META": run_reference_pair(cfg, seq, 17, 101, FixedMetaAgent, 0.0),
-        "REVISING_META": run_reference_pair(cfg, seq, 17, 101, RevisingMetaAgent, 0.0),
-    }
     report = validate_confirmatory_controls(
         prereg,
-        bundles,
+        _bundles(cfg, seq),
         sequence_balance_rule=seq,
         history_seeds=(17,),
         future_seeds=(101,),
@@ -93,16 +97,45 @@ def test_confirmatory_validation_rejects_wrong_sequence_rule_or_schedule():
     cfg, seq = _config_and_rule()
     d1, d2, d3 = _rules()
     prereg = freeze_preregistration(cfg, seq, d1, d2, d3, (), (17,), (101,), SPEC_COMMIT)
-    bundles = {
-        "LOCAL": run_reference_pair(cfg, seq, 17, 101, LocalAgent, 0.0),
-        "FIXED_META": run_reference_pair(cfg, seq, 17, 101, FixedMetaAgent, 0.0),
-        "REVISING_META": run_reference_pair(cfg, seq, 17, 101, RevisingMetaAgent, 0.0),
-    }
+    bundles = _bundles(cfg, seq)
     different = SequenceBalanceRule(1.0, 2.0, 2.0, 3, 1000)
     with pytest.raises(ValueError, match="sequence"):
         validate_confirmatory_controls(prereg, bundles, sequence_balance_rule=different, history_seeds=(17,), future_seeds=(101,))
     with pytest.raises(ValueError, match="schedule"):
         validate_confirmatory_controls(prereg, bundles, sequence_balance_rule=seq, history_seeds=(18,), future_seeds=(101,))
+
+
+def test_confirmatory_validation_binds_bundles_to_agent_seed_and_rule_provenance():
+    cfg, seq = _config_and_rule()
+    d1, d2, d3 = _rules()
+    prereg = freeze_preregistration(cfg, seq, d1, d2, d3, (), (17,), (101,), SPEC_COMMIT)
+    bundles = _bundles(cfg, seq)
+
+    bad_seed = dict(bundles)
+    bad_seed["LOCAL"] = replace(
+        bad_seed["LOCAL"], history_seed_identity=seed_identity("history", 999)
+    )
+    with pytest.raises(ValueError, match="history seed"):
+        validate_confirmatory_controls(prereg, bad_seed, sequence_balance_rule=seq, history_seeds=(17,), future_seeds=(101,))
+
+    bad_agent = dict(bundles)
+    bad_agent["LOCAL"] = replace(bad_agent["LOCAL"], agent_name="FIXED_META")
+    with pytest.raises(ValueError, match="agent identity"):
+        validate_confirmatory_controls(prereg, bad_agent, sequence_balance_rule=seq, history_seeds=(17,), future_seeds=(101,))
+
+
+def test_confirmatory_validation_rejects_unfrozen_multi_seed_aggregation():
+    cfg, seq = _config_and_rule()
+    d1, d2, d3 = _rules()
+    prereg = freeze_preregistration(cfg, seq, d1, d2, d3, (), (17, 18), (101,), SPEC_COMMIT)
+    with pytest.raises(ValueError, match="multi-seed"):
+        validate_confirmatory_controls(
+            prereg,
+            _bundles(cfg, seq),
+            sequence_balance_rule=seq,
+            history_seeds=(17, 18),
+            future_seeds=(101,),
+        )
 
 
 def test_freeze_requires_one_common_zero_budget_match_tolerance():

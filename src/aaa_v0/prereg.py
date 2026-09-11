@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass
 from typing import Mapping
 
 from aaa_v0.contracts import AssayConfig, SequenceBalanceRule
+from aaa_v0.provenance import seed_commitment
 from aaa_v0.runner import RunBundle
 from aaa_v0.serialization import sha256_json
 
@@ -187,6 +188,8 @@ def validate_confirmatory_controls(
         raise ValueError("sequence balance rule mismatch")
     if tuple(history_seeds) != preregistration.confirmatory_history_seeds or tuple(future_seeds) != preregistration.confirmatory_future_seeds:
         raise ValueError("confirmatory seed schedule mismatch")
+    if len(history_seeds) != 1 or len(future_seeds) != 1:
+        raise ValueError("multi-seed confirmatory aggregation is not frozen in AAA-v0")
     confirmatory_ids = {
         *(seed_identity("history", seed) for seed in history_seeds),
         *(seed_identity("future", seed) for seed in future_seeds),
@@ -198,6 +201,10 @@ def validate_confirmatory_controls(
     if set(bundles) != set(expected_names):
         raise ValueError("confirmatory bundle set mismatch")
     config_hash = sha256_json(preregistration.config.to_dict())
+    sequence_rule_hash = sha256_json(asdict(preregistration.sequence_balance_rule))
+    history_id = seed_identity("history", history_seeds[0])
+    future_id = seed_identity("future", future_seeds[0])
+    future_commitment = seed_commitment(future_seeds[0])
 
     signature: list[tuple[str, bool, bool, bool]] = []
     lower_gate_failure = False
@@ -206,8 +213,16 @@ def validate_confirmatory_controls(
         status = bundle.protocol_status
         if not (status.balance_ok and status.custody_ok and status.match_ok):
             lower_gate_failure = True
+        if bundle.agent_name != name:
+            raise ValueError("bundle agent identity mismatch")
         if bundle.config_hash != config_hash:
             raise ValueError("config hash mismatch")
+        if bundle.sequence_balance_rule_hash != sequence_rule_hash:
+            raise ValueError("bundle sequence balance rule mismatch")
+        if bundle.history_seed_identity != history_id:
+            raise ValueError("bundle history seed mismatch")
+        if bundle.future_seed_identity != future_id or bundle.future_seed_commitment != future_commitment:
+            raise ValueError("bundle future seed mismatch")
         d1 = _transfer_passes(bundle.d1_paired_curve, preregistration.d1_rule)
         d2 = _transfer_passes(bundle.d2_paired_curve, preregistration.d2_rule)
         recovery = _recovery_passes_with_config(bundle, preregistration.d3_rule, preregistration.config)

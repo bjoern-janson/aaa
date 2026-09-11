@@ -26,10 +26,18 @@ class AssayConfig:
             raise ValueError("all count fields must be positive")
         if self.q_count != self.z_count:
             raise ValueError("AAA-v0 requires q_count == z_count")
+        if self.q_count < 2:
+            raise ValueError("AAA-v0 requires at least two context/probe roles")
+        if self.theta_count < 2:
+            raise ValueError("AAA-v0 requires at least two target values")
+        if self.history_repeats % self.theta_count != 0:
+            raise ValueError("AAA-v0 exact history balancing requires history_repeats % theta_count == 0")
         if self.max_budget < 1:
             raise ValueError("max_budget must be >= 1")
         if self.d3_change_after < 1:
             raise ValueError("d3_change_after must be >= 1")
+        if self.d3_change_after >= self.future_tasks_per_family:
+            raise ValueError("d3_change_after must leave at least one post-change D3 task")
 
     @classmethod
     def exploratory_default(cls) -> "AssayConfig":

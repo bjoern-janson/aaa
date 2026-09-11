@@ -57,6 +57,16 @@ def _load_sequence_rule(path: str) -> SequenceBalanceRule:
     return SequenceBalanceRule(**_read_json(path))  # type: ignore[arg-type]
 
 
+def _raw_bundle_entry(name: str, history_seed: int, future_seed: int, bundle) -> dict[str, object]:
+    return {
+        "agent": name,
+        "history_seed": history_seed,
+        "future_seed": future_seed,
+        "bundle": bundle.to_dict(),
+        "raw_trial_records": [asdict(record) for record in bundle.raw_trial_records],
+    }
+
+
 def _cmd_audit_history(args: argparse.Namespace) -> int:
     cfg = _load_config(args.config)
     rule = _load_sequence_rule(args.sequence_rule)
@@ -75,6 +85,8 @@ def _cmd_audit_history(args: argparse.Namespace) -> int:
             }),
             "treatment_mi": report.treatment_mi,
             "control_mi": report.control_mi,
+            "treatment_q_theta_mi": report.treatment_q_theta_mi,
+            "control_q_theta_mi": report.control_q_theta_mi,
             "sequence": asdict(report.sequence),
             "mismatched_fields": list(report.mismatched_fields),
         }
@@ -115,13 +127,7 @@ def _cmd_calibrate_controls(args: argparse.Namespace) -> int:
         for future_seed in future_seeds:
             for name, cls in _reference_classes():
                 bundle = run_reference_pair(cfg, rule, history_seed, future_seed, cls, 0.0)
-                entry = {
-                    "agent": name,
-                    "history_seed": history_seed,
-                    "future_seed": future_seed,
-                    "bundle": bundle.to_dict(),
-                }
-                lines.append(canonical_json_bytes(entry))
+                lines.append(canonical_json_bytes(_raw_bundle_entry(name, history_seed, future_seed, bundle)))
                 summaries[name].append(bundle.to_dict())
     (out / "raw_control_runs.jsonl").write_bytes(b"\n".join(lines) + b"\n")
 
@@ -149,6 +155,8 @@ def _cmd_calibrate_controls(args: argparse.Namespace) -> int:
 
 def _cmd_freeze_prereg(args: argparse.Namespace) -> int:
     exploratory = _read_json(args.exploratory_report)
+    if exploratory.get("status") != "EXPLORATORY_UNSCORED" or exploratory.get("aaa_evidence") != "NONE":
+        raise SystemExit("exploratory report is not an unscored AAA-v0 calibration artifact")
     rules = _read_json(args.decision_rules)
     cfg = AssayConfig(**dict(exploratory["config"]))  # type: ignore[arg-type]
     report_seq = SequenceBalanceRule(**dict(exploratory["sequence_balance_rule"]))  # type: ignore[arg-type]
@@ -186,10 +194,13 @@ def _cmd_validate_controls(args: argparse.Namespace) -> int:
         raise SystemExit("multi-seed confirmatory aggregation is not frozen in AAA-v0")
     history_seed = prereg.confirmatory_history_seeds[0]
     future_seed = prereg.confirmatory_future_seeds[0]
+    out = Path(args.output_dir)
+    out.mkdir(parents=True, exist_ok=True)
     bundles = {}
+    raw_lines: list[bytes] = []
     try:
         for name, cls in _reference_classes():
-            bundles[name] = run_reference_pair(
+            bundle = run_reference_pair(
                 prereg.config,
                 prereg.sequence_balance_rule,
                 history_seed,
@@ -197,9 +208,9 @@ def _cmd_validate_controls(args: argparse.Namespace) -> int:
                 cls,
                 prereg.d1_rule.max_zero_budget_abs_delta,
             )
+            bundles[name] = bundle
+            raw_lines.append(canonical_json_bytes(_raw_bundle_entry(name, history_seed, future_seed, bundle)))
     except ProtocolStop as exc:
-        out = Path(args.output_dir)
-        out.mkdir(parents=True, exist_ok=True)
         payload = {
             "status": exc.code,
             "next_phase_gate_passed": False,
@@ -210,6 +221,7 @@ def _cmd_validate_controls(args: argparse.Namespace) -> int:
         _write_manifest(out)
         return 1
 
+    (out / "confirmatory_control_runs.jsonl").write_bytes(b"\n".join(raw_lines) + b"\n")
     report = validate_confirmatory_controls(
         prereg,
         bundles,
@@ -217,8 +229,6 @@ def _cmd_validate_controls(args: argparse.Namespace) -> int:
         history_seeds=prereg.confirmatory_history_seeds,
         future_seeds=prereg.confirmatory_future_seeds,
     )
-    out = Path(args.output_dir)
-    out.mkdir(parents=True, exist_ok=True)
     _write_canonical(out / "confirmatory_controls.json", report.to_dict())
     _write_manifest(out)
     return 0 if report.next_phase_gate_passed else 1

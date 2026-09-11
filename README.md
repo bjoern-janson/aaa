@@ -108,18 +108,30 @@ Positive transfer and corrective recoverability are distinct scientific properti
 
 AAA was motivated by a progression from static task induction toward interactive adaptation, including discussion of a possible successor to ARC-AGI-3. The AAA concept does **not** depend on an official ARC-AGI-4 having this form, and it is intended to stand independently as a measurable capability class.
 
-## Status / claim ceiling
+## Current project status
 
-**Concept status: V0 frozen.**
+**Concept V0 remains frozen.** The repository now also contains an **AAA-v0 assay kernel**, but that kernel is only software-validated apparatus. It is not yet a scientifically validated benchmark and it has not produced an empirical AAA result.
 
-This repository currently proposes a scientific object and claim structure only.
+Current gate state:
 
-It does **not** claim:
+```text
+AAA Concept V0             FROZEN
+AAA-v0 assay design        FROZEN
+AAA-v0 assay kernel        IMPLEMENTED / SOFTWARE-VALIDATED ONLY
+scientific preregistration NOT FROZEN
+confirmatory controls      NOT RUN scientifically
+frontier-model execution   NOT RUN
+AAA evidence               NONE
+```
 
-- an implemented AAA benchmark;
-- a validated matching procedure;
-- a frozen `LearnEff` operationalization;
-- a completed causal assay;
+The frozen V0 formalization files preserve their historical freeze-time status language. Live implementation state is recorded separately in [`IMPLEMENTATION_STATE.json`](IMPLEMENTATION_STATE.json).
+
+This repository does **not** claim:
+
+- a scientifically validated AAA benchmark;
+- a validated matching procedure for frontier models;
+- a frozen scientific `LearnEff` operationalization;
+- a completed causal assay on a frontier model;
 - an empirical demonstration of acquired adaptive advantage;
 - an empirical demonstration of transferable or correctable adaptive advantage.
 
@@ -129,3 +141,5 @@ See:
 
 - [`formalization/AAA_CONCEPT_V0.md`](formalization/AAA_CONCEPT_V0.md)
 - [`formalization/CLAIM_HIERARCHY_V0.md`](formalization/CLAIM_HIERARCHY_V0.md)
+- [`docs/superpowers/specs/2026-09-11-aaa-v0-assay-design.md`](docs/superpowers/specs/2026-09-11-aaa-v0-assay-design.md)
+- [`IMPLEMENTATION_STATE.json`](IMPLEMENTATION_STATE.json)

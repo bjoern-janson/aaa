@@ -1,3 +1,5 @@
+from collections import Counter
+
 import pytest
 
 from aaa_v0.contracts import AssayConfig, SequenceBalanceRule
@@ -18,6 +20,11 @@ def test_history_pair_has_exact_marginals_and_only_target_dependency():
     assert all(e.q_star == pair.treatment_phi[e.z] for e in pair.treatment)
     assert empirical_mutual_information((e.z, e.q_star) for e in pair.treatment) > 0.0
     assert empirical_mutual_information((e.z, e.q_star) for e in pair.control) == 0.0
+    assert Counter((e.q_star, e.theta) for e in pair.treatment) == Counter(
+        (e.q_star, e.theta) for e in pair.control
+    )
+    assert empirical_mutual_information((e.q_star, e.theta) for e in pair.treatment) == 0.0
+    assert empirical_mutual_information((e.q_star, e.theta) for e in pair.control) == 0.0
 
 
 def test_impossible_sequence_rule_fails_closed():
