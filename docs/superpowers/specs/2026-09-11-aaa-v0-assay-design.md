@@ -113,7 +113,7 @@ N_{\rm episodes},\quad
 \text{resource budget}.
 ```
 
-Where practical, paired treatment/control histories should use the same ordered multiset of episode shells and the same ordered `theta` values.
+Paired treatment/control histories must use the same ordered `z` sequence, the same ordered `theta` sequence, the same episode templates, and the same presentation/resource schedule. `q*` assignments differ only as required to manipulate the `Z`–`Q*` dependency while preserving the exact declared `Q*` marginal and prospectively frozen sequence-balance statistics.
 
 The histories differ only in the cross-task dependency between structural context and informative probe role:
 
@@ -141,7 +141,9 @@ I(Z;Q^\star)_{H^0}=0
 
 up to the exact finite-design tolerance specified in the later preregistration.
 
-The control construction must not change episode count, target distribution, task difficulty, amount of solved information, or available resources.
+The control construction must not change episode count, target distribution, task difficulty, amount of solved information, available resources, or any preregistered ordering statistic other than the intended `Z`–`Q*` association.
+
+A balance audit must attempt to predict condition from every declared non-treatment feature and sequence statistic. Any residual condition cue beyond the intended `Z`–`Q*` association is a design failure until repaired.
 
 If any additional cross-task regularity differs between arms, the design is invalid until repaired.
 
@@ -178,12 +180,12 @@ Protocol order:
 1. freeze treatment/control histories
 2. expose histories to the two conditions
 3. freeze terminal agent artifacts/state references
-4. derive or reveal the future-task seed
+4. derive or reveal the future-task seed to the evaluator/harness only
 5. generate future D1/D2/D3 tasks
 6. begin future learning measurement
 ```
 
-Future `theta` values must not be instantiated or available to the evaluated agents before step 4.
+Future `theta` values must not be instantiated or available to the evaluated agents before step 4. The seed itself must not be disclosed to evaluated agents unless the future assay contract explicitly requires it.
 
 The later preregistration should use an auditable prospective seed mechanism. The exact randomness source is not fixed by this design document.
 
@@ -274,7 +276,7 @@ C_{A_{H^+}}(\tau,b)-C_{A_{H^0}}(\tau,b)
 
 or its discrete preregistered analogue.
 
-The exact competence metric, budget unit, weighting function, horizon, uncertainty interval, and decision threshold remain to be frozen in the preregistration after control validation.
+The exact competence metric, budget unit, weighting function, horizon, uncertainty interval, and decision threshold remain to be frozen after exploratory reference-control calibration and before confirmatory control validation or frontier-model execution.
 
 ## 10. Paired evaluation
 
@@ -348,11 +350,11 @@ D3 records at minimum the trajectories of:
 - evidence accumulated after invalidation;
 - recovery after the change point.
 
-The final `C_recovery` endpoint is not fixed in this design document. It should be frozen only after the environment demonstrably distinguishes brittle from revising reference controls.
+The final `C_recovery` endpoint is not fixed in this design document. It should be frozen only after exploratory control calibration demonstrates that the environment can separate brittle from revising reference controls.
 
 A C4 claim requires the lower claim layers required by the frozen hierarchy plus the preregistered D3 correction criterion.
 
-## 14. Reference-control calibration
+## 14. Reference-control calibration and validation
 
 Before any frontier-model result may be scientifically interpreted, AAA-v0 must reproduce a frozen qualitative control signature.
 
@@ -405,9 +407,16 @@ FIXED_META      +    +    -
 REVISING_META   +    +    +
 ```
 
-The exact numerical thresholds corresponding to `+` and `-` are a preregistration decision, not a post-hoc interpretation.
+The columns are intentionally asymmetric:
 
-If the frozen controls do not reproduce their required qualitative signatures:
+- `D1` and `D2` `+/-` refer to the prospectively defined transfer/adaptive-advantage criterion;
+- `D3` `+/-` refers to the prospectively defined corrective-recovery criterion, **not** to raw final competence.
+
+Reference-control development may use an explicitly labeled exploratory calibration set to establish that the environment has the intended qualitative separability. The numerical thresholds, task-family parameters, and final decision rules must then be frozen in the preregistration.
+
+After preregistration, the reference controls must be rerun on fresh confirmatory control instances generated under the frozen contract.
+
+If the confirmatory controls do not reproduce their required qualitative signatures:
 
 ```text
 CONTROL_MISMATCH -> STOP -> no frontier-model interpretation
@@ -460,7 +469,7 @@ Verify exact or prospectively tolerated equality of treatment/control marginals 
 
 ### 17.2 Sequence leakage
 
-Treatment/control histories must not differ unintentionally in ordering statistics, repetition structure, transition frequencies, or other cues correlated with condition.
+Treatment/control histories must not differ unintentionally in ordering statistics, repetition structure, transition frequencies, or other cues correlated with condition beyond the intended `Z`–`Q*` association.
 
 ### 17.3 Information-volume leakage
 
@@ -501,16 +510,19 @@ CONCEPT V0 FROZEN
 ASSAY DESIGN
       |
       v
-FORMAL/GENERATOR AUDIT
+IMPLEMENTATION (UNSCORED)
       |
       v
-REFERENCE-CONTROL CALIBRATION
+FORMAL / GENERATOR AUDIT
+      |
+      v
+EXPLORATORY REFERENCE-CONTROL CALIBRATION
       |
       v
 PREREGISTRATION FREEZE
       |
       v
-IMPLEMENTATION VALIDATION
+CONFIRMATORY CONTROL VALIDATION
       |
       v
 FRONTIER-MODEL EXECUTION
@@ -520,6 +532,8 @@ BOUNDED INTERPRETATION
 ```
 
 No later gate may authorize interpretation when an earlier gate fails.
+
+Exploratory calibration results are apparatus-development evidence only and must not be reported as AAA model results.
 
 ## 19. Repository and provenance boundary
 
@@ -547,12 +561,13 @@ The concept, assay, implementation, and empirical result remain separate provena
 This assay design is acceptable for transition into implementation planning only if review agrees that:
 
 1. the only manipulated acquisition-history regularity is the declared `Z`–`Q*` dependency;
-2. current-answer advantages are blocked by fresh post-boundary targets and the matching gate;
-3. the primary endpoint is the full paired learning curve `Delta C(b)`;
-4. D1, D2, and D3 make distinct claims and are not silently merged;
-5. the reference-control matrix is mandatory and falsifiable;
-6. control mismatch stops scientific interpretation;
-7. nulls remain local to the claim layer tested;
-8. the design preserves the Concept V0 claim ceiling.
+2. all other declared marginal, sequence, information, and resource properties are matched or governed by a prospectively explicit tolerance;
+3. current-answer advantages are blocked by fresh post-boundary targets and the matching gate;
+4. the primary endpoint is the full paired learning curve `Delta C(b)`;
+5. D1, D2, and D3 make distinct claims and are not silently merged;
+6. the reference-control matrix is mandatory, asymmetric by column, and falsifiable;
+7. confirmatory control mismatch stops scientific interpretation;
+8. nulls remain local to the claim layer tested;
+9. the design preserves the Concept V0 claim ceiling.
 
 Until that review is complete, AAA-v0 remains **DESIGN ONLY / NOT IMPLEMENTED / UNSCORED**.
