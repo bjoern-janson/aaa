@@ -4,9 +4,9 @@
 
 **Goal:** Build a deterministic, auditable AAA-v0 assay kernel that generates balanced treatment/control histories, enforces the terminal boundary, produces D1/D2/D3 future tasks, runs the three reference controls, records paired learning curves and corrective-recovery trajectories, and provides tooling for later exploratory calibration, preregistration freeze, and fresh confirmatory control validation—without executing or interpreting any frontier model.
 
-**Architecture:** The implementation is a Python package split into immutable domain contracts, paired-history generation/audit, seed custody, future-task/rendering mechanics, reference agents, measurement, protocol orchestration, and preregistration/control-validation tooling. Scientific choices left open by the approved design are serialized configuration rather than hidden constants. This implementation phase builds and software-validates the machinery only; calibration, scientific preregistration, confirmatory control execution, and frontier execution remain later gated actions.
+**Architecture:** The implementation is a Python package split into immutable domain contracts, paired-history construction/audit, seed custody, future-task/rendering mechanics, reference agents, measurement, protocol orchestration, and preregistration/control-validation tooling. Scientific choices left open by the approved design are explicit serialized contracts rather than hidden constants. This implementation phase builds and software-validates machinery only; exploratory calibration, the scientific preregistration freeze, confirmatory scientific controls, and frontier execution remain later gated actions.
 
-**Tech Stack:** Python 3.12+, standard library, NumPy 2.x, pytest 8.x. The kernel has no network dependency. JSON/JSONL are custody formats; SHA-256 is used for content addressing and provenance.
+**Tech Stack:** Python 3.12+, standard library, NumPy 2.x, pytest 8.x. No network dependency. JSON/JSONL are custody formats; SHA-256 is used for content addressing and provenance.
 
 **Spec:** `docs/superpowers/specs/2026-09-11-aaa-v0-assay-design.md`
 
@@ -14,15 +14,15 @@
 
 - Concept commit: `45061c6ea30edf4c16833c3deca0b13c2d98bb8f`.
 - Approved assay-design commit: `04f0f4380d4fad01386c1f61e95a1e65c24f8de0`.
-- The only manipulated acquisition-history regularity is the `Z`–`Q*` dependency: treatment has `I(Z;Q*) > 0`; control destroys that dependency while preserving the frozen marginals and sequence-balance contract.
-- Treatment/control histories use the same ordered `z` sequence, same ordered `theta` sequence, same episode templates, and same presentation/resource schedule. `q*` assignments differ only as required by the treatment.
+- The only intended acquisition-history treatment is the `Z`–`Q*` dependency: treatment has `I(Z;Q*) > 0`; control has exact empirical `I(Z;Q*) = 0` while preserving declared marginals and satisfying a preregistered sequence-balance rule.
+- Treatment/control histories share the same ordered `z`, `theta`, episode-template, presentation-budget, and resource schedule. `q*` assignments differ only to instantiate/destroy the target relation and must pass sequence-cue audits.
 - Acquisition history is passive.
 - Future targets and future task realizations become available only after the terminal boundary is frozen.
 - Matching is bounded observable matching at `b=0`; it never authorizes hidden-state identity.
-- Primary measurement is the full paired curve `Delta C(b)` at every frozen budget point. Area under the curve is secondary.
+- Primary measurement is the full paired curve `Delta C(b)` at every frozen budget point. AUC is secondary.
 - D1 measures surface transfer; D2 measures transfer across a frozen surface-representation transformation; D3 measures corrective recovery after `phi -> phi_prime`. D3 success is not raw final competence.
 - Required reference signature: `LOCAL = (-,-,-)`, `FIXED_META = (+,+,-)`, `REVISING_META = (+,+,+)`, with D3 signs referring only to the frozen recovery rule.
-- Exploratory control calibration and confirmatory control validation use disjoint seeds and instances. Numerical thresholds are frozen between them in a preregistration artifact.
+- Exploratory calibration and confirmatory validation use disjoint seeds/instances. All numerical rules—including sequence-balance tolerances—are frozen between them in a preregistration artifact.
 - `BALANCE_FAILURE`, `MATCH_FAILURE`, custody failure, and `CONTROL_MISMATCH` are hard stops.
 - No frontier-model adapter, provider SDK, model execution, or empirical AAA interpretation is in scope.
 - No implementation task modifies `README.md`, `formalization/AAA_CONCEPT_V0.md`, `formalization/CLAIM_HIERARCHY_V0.md`, or the approved assay-design spec.
@@ -76,15 +76,13 @@ The package deliberately contains no frontier/provider integration.
 - Test: `tests/test_contracts.py`
 
 **Interfaces:**
-- Produces: `AssayConfig`, `HistoryEpisode`, `HistoryPair`, `LatentTask`, `SurfaceView`, `SolvedHistoryView`, `ProbeObservation`, `TrialRecord`, `ProtocolStatus`, `canonical_json_bytes()`, `sha256_json()`.
+- Produces: `AssayConfig`, `SequenceBalanceRule`, `HistoryEpisode`, `HistoryPair`, `LatentTask`, `SurfaceView`, `SolvedHistoryView`, `ProbeObservation`, `TrialRecord`, `ProtocolStatus`, `canonical_json_bytes()`, `sha256_json()`.
 
 - [ ] **Step 1: Add packaging metadata**
 
 Create `pyproject.toml` with package name `aaa-v0`, Python `>=3.12`, dependency `numpy>=2.0,<3`, test dependency `pytest>=8,<9`, `src` package layout, and pytest `testpaths = ["tests"]`.
 
 - [ ] **Step 2: Write failing contract tests**
-
-Create `tests/test_contracts.py`:
 
 ```python
 from dataclasses import FrozenInstanceError
@@ -107,14 +105,7 @@ def test_assay_config_is_frozen_and_canonical():
 
 
 def test_history_episode_serializes_declared_fields():
-    ep = HistoryEpisode(
-        episode_id="h-000",
-        z=0,
-        theta=2,
-        q_star=1,
-        surface_seed=7,
-        resource_units=1,
-    )
+    ep = HistoryEpisode("h-000", 0, 2, 1, 7, 1)
     assert ep.to_dict() == {
         "episode_id": "h-000",
         "z": 0,
@@ -135,7 +126,7 @@ Expected: import failure because `aaa_v0.contracts` does not exist.
 
 - [ ] **Step 4: Implement exact contract shapes**
 
-In `contracts.py`, import `asdict`, `dataclass`, and `Literal`. Implement frozen dataclasses with `to_dict()` returning `asdict(self)` where the result is JSON-safe. Use these exact fields:
+Implement frozen dataclasses using `dataclasses.asdict` for JSON-safe `to_dict()` methods where needed:
 
 ```python
 @dataclass(frozen=True)
@@ -154,6 +145,15 @@ class AssayConfig:
 
     def to_dict(self) -> dict[str, int]:
         return asdict(self)
+
+
+@dataclass(frozen=True)
+class SequenceBalanceRule:
+    max_q_transition_l1: float
+    max_q_run_length_l1: float
+    max_lagged_mi_delta: float
+    lag_window: int
+    max_search_attempts: int
 
 
 @dataclass(frozen=True)
@@ -227,12 +227,14 @@ class TrialRecord:
 
 @dataclass(frozen=True)
 class ProtocolStatus:
+    balance_ok: bool
+    custody_ok: bool
     match_ok: bool
     controls_ok: bool
     stop_code: str | None
 ```
 
-`AssayConfig.__post_init__` rejects non-positive counts, `q_count != z_count`, `max_budget < 1`, and `d3_change_after < 1`.
+`AssayConfig.__post_init__` rejects non-positive counts, `q_count != z_count`, `max_budget < 1`, and `d3_change_after < 1`. `SequenceBalanceRule.__post_init__` rejects negative tolerances, `lag_window < 1`, and `max_search_attempts < 1`.
 
 - [ ] **Step 5: Implement deterministic serialization**
 
@@ -245,25 +247,18 @@ def sha256_json(value: object) -> str:
     return hashlib.sha256(canonical_json_bytes(value)).hexdigest()
 ```
 
-- [ ] **Step 6: Verify GREEN**
+- [ ] **Step 6: Verify GREEN and commit**
 
 ```bash
 pytest tests/test_contracts.py -v
 pytest -q
-```
-
-Expected: PASS.
-
-- [ ] **Step 7: Commit**
-
-```bash
 git add pyproject.toml src/aaa_v0/__init__.py src/aaa_v0/contracts.py src/aaa_v0/serialization.py tests/test_contracts.py
 git commit -m "feat: add AAA-v0 immutable assay contracts"
 ```
 
 ---
 
-### Task 2: Paired acquisition-history generator and balance audit
+### Task 2: Paired acquisition-history generator and sequence-aware balance audit
 
 **Files:**
 - Create: `src/aaa_v0/histories.py`
@@ -272,13 +267,15 @@ git commit -m "feat: add AAA-v0 immutable assay contracts"
 - Test: `tests/test_balance.py`
 
 **Interfaces:**
-- Produces: `make_history_pair(config: AssayConfig, seed: int) -> HistoryPair`, `empirical_mutual_information(pairs) -> float`, `BalanceReport`, `audit_history_pair(pair) -> BalanceReport`.
+- Produces: `make_history_pair(config, seed, sequence_rule) -> HistoryPair`, `BalanceConstructionError`, `empirical_mutual_information()`, `SequenceDiagnostics`, `BalanceReport`, `audit_history_pair(pair, sequence_rule) -> BalanceReport`.
 
-- [ ] **Step 1: Write failing paired-history tests**
+- [ ] **Step 1: Write failing exact-marginal tests**
 
 ```python
-pair = make_history_pair(AssayConfig.exploratory_default(), seed=17)
-assert sorted(pair.treatment_phi) == list(range(4))
+cfg = AssayConfig.exploratory_default()
+rule = SequenceBalanceRule(2.0, 2.0, 2.0, 3, 1000)
+pair = make_history_pair(cfg, seed=17, sequence_rule=rule)
+assert sorted(pair.treatment_phi) == list(range(cfg.q_count))
 assert [e.z for e in pair.treatment] == [e.z for e in pair.control]
 assert [e.theta for e in pair.treatment] == [e.theta for e in pair.control]
 assert [e.surface_seed for e in pair.treatment] == [e.surface_seed for e in pair.control]
@@ -289,6 +286,8 @@ assert empirical_mutual_information((e.z, e.q_star) for e in pair.treatment) > 0
 assert empirical_mutual_information((e.z, e.q_star) for e in pair.control) == 0.0
 ```
 
+The permissive rule above is a software-test fixture only; it is not a scientific threshold.
+
 - [ ] **Step 2: Verify RED**
 
 ```bash
@@ -297,21 +296,29 @@ pytest tests/test_histories.py -v
 
 Expected: import failure.
 
-- [ ] **Step 3: Implement exact finite balancing**
+- [ ] **Step 3: Implement exact marginal construction with constrained control shuffling**
 
-Generate `treatment_phi` as a seeded permutation of `range(q_count)`. This bijection plus equal `z` counts makes the treatment `Q*` marginal uniform. For each `z`, create exactly `history_repeats * q_count` episodes. Treatment uses `q_star = treatment_phi[z]`; control assigns every `q_star` exactly `history_repeats` times within each `z`, giving exact empirical independence. Generate `theta`, ordering, surface seeds, and `phi` from SHA-256 domain-separated RNG streams named `history-theta`, `history-order`, `history-surface`, and `history-phi`.
+Generate `treatment_phi` as a seeded permutation of `range(q_count)`. Make each `z` appear exactly `history_repeats * q_count` times. Treatment uses `q_star = phi[z]`. Control assigns every `q_star` exactly `history_repeats` times within each `z`, which makes finite-sample `I(Z;Q*) = 0` exactly.
 
-- [ ] **Step 4: Write failing balance-audit tests**
+Build one ordered episode shell containing `episode_id`, `z`, `theta`, `surface_seed`, and `resource_units`. Both conditions reuse that shell byte-for-byte; only `q_star` differs.
+
+For the control assignment, deterministically shuffle the fixed within-`z` `q_star` multisets using a domain-separated RNG and rejection-sample until `sequence_diagnostics(treatment_q, control_q, z_sequence, rule)` passes. If no assignment passes within `rule.max_search_attempts`, raise `BalanceConstructionError` rather than relaxing the rule.
+
+Use SHA-256 domain-separated RNG streams `history-theta`, `history-order`, `history-surface`, `history-phi`, and `history-control-q`.
+
+- [ ] **Step 4: Define sequence diagnostics**
+
+`SequenceDiagnostics` contains:
 
 ```python
-report = audit_history_pair(pair)
-assert report.ok
-assert report.mismatched_fields == ()
-assert report.treatment_mi > 0.0
-assert report.control_mi == 0.0
+@dataclass(frozen=True)
+class SequenceDiagnostics:
+    q_transition_l1: float
+    q_run_length_l1: float
+    lagged_mi_delta: tuple[float, ...]
 ```
 
-Rebuild a control history with one changed `theta`, one changed `resource_units`, and one order swap in separate tests. Each must fail with a named mismatch.
+Compute normalized `Q* -> Q*` transition matrices, normalized run-length histograms, and `I(Z_t; Q*_{t+k})` for every integer lag `k` in `[-lag_window, -1] U [1, lag_window]`. `q_transition_l1` and `q_run_length_l1` are treatment/control L1 distances; `lagged_mi_delta` is treatment minus control at each lag. The intended lag-zero difference is excluded because that is the treatment itself.
 
 - [ ] **Step 5: Implement balance audit**
 
@@ -324,30 +331,24 @@ class BalanceReport:
     mismatched_fields: tuple[str, ...]
     treatment_mi: float
     control_mi: float
+    sequence: SequenceDiagnostics
     treatment_hash: str
     control_hash: str
     non_treatment_sequence_hash_treatment: str
     non_treatment_sequence_hash_control: str
 ```
 
-The non-treatment fingerprint covers ordered `(episode_id, z, theta, surface_seed, resource_units)` and excludes `q_star`. Exact fingerprint equality is required. Compute MI from finite counts using natural logarithms and coerce absolute values below `1e-15` to `0.0`.
+`ok` requires exact non-treatment sequence equality, exact `Q*` marginal equality, treatment MI positive, control MI normalized to exactly `0.0`, and every sequence diagnostic within the supplied rule. Values with absolute magnitude below `1e-15` are normalized to zero.
 
-- [ ] **Step 6: Add treatment-isolation regression test**
+- [ ] **Step 6: Write hard-failure regression tests**
 
-Redact `q_star` from both histories, serialize canonically, and assert byte equality. This test is the executable check that no other episode-level field carries condition.
+Redact `q_star` and assert treatment/control canonical serialization is byte-identical. Separately mutate `theta`, `resource_units`, or order and assert `ok is False`. Supply a deliberately impossible all-zero sequence rule and low search budget, and assert construction raises `BalanceConstructionError` rather than silently proceeding.
 
-- [ ] **Step 7: Verify GREEN**
+- [ ] **Step 7: Verify GREEN and commit**
 
 ```bash
 pytest tests/test_histories.py tests/test_balance.py -v
 pytest -q
-```
-
-Expected: PASS.
-
-- [ ] **Step 8: Commit**
-
-```bash
 git add src/aaa_v0/histories.py src/aaa_v0/balance.py tests/test_histories.py tests/test_balance.py
 git commit -m "feat: add balanced AAA history intervention"
 ```
@@ -391,9 +392,7 @@ pytest tests/test_provenance.py -v
 
 Expected: import failure.
 
-- [ ] **Step 3: Implement monotonic phase transition and commitments**
-
-Use:
+- [ ] **Step 3: Implement monotonic phase transition and commitment checking**
 
 ```python
 class ProtocolPhase(Enum):
@@ -402,11 +401,11 @@ class ProtocolPhase(Enum):
     FUTURE_REVEALED = "FUTURE_REVEALED"
 ```
 
-The future-seed commitment is SHA-256 over `b"aaa-v0-future-seed:" + str(seed).encode("ascii")`. `TerminalSnapshot` stores treatment/control state hashes, history pair hash, config hash, future-seed commitment, and a snapshot hash over those fields. `reveal_future_seed()` verifies the caller's snapshot hash and commitment before returning `FutureSeedReveal(seed, commitment)`.
+Commit the future seed with SHA-256 over `b"aaa-v0-future-seed:" + str(seed).encode("ascii")`. `TerminalSnapshot` stores treatment/control state hashes, history pair hash, config hash, future-seed commitment, and a snapshot hash. `reveal_future_seed()` verifies snapshot identity and seed commitment before returning `FutureSeedReveal`.
 
-- [ ] **Step 4: Add tamper and cross-custody tests**
+- [ ] **Step 4: Add tamper/cross-custody tests**
 
-Changing any snapshot field or using another custody object's snapshot must raise `ProtocolOrderError`. The revealed seed must reproduce the commitment.
+Changing any snapshot field or presenting another custody object's snapshot raises `ProtocolOrderError`. The revealed seed must reproduce the pre-boundary commitment.
 
 - [ ] **Step 5: Verify GREEN and commit**
 
@@ -419,7 +418,7 @@ git commit -m "feat: enforce AAA terminal seed boundary"
 
 ---
 
-### Task 4: Future tasks, D1/D2/D3 rendering, and environment mechanics
+### Task 4: History/future rendering, D1/D2/D3 tasks, and environment mechanics
 
 **Files:**
 - Create: `src/aaa_v0/tasks.py`
@@ -428,8 +427,8 @@ git commit -m "feat: enforce AAA terminal seed boundary"
 - Test: `tests/test_environment.py`
 
 **Interfaces:**
-- Produces: `make_future_tasks(config, reveal, phi) -> dict[str, tuple[LatentTask, ...]]`, `render_task(task, config) -> SurfaceView`, `MetaProbeEnvironment`.
-- `SurfaceView` exposes observable structural signatures; it never exposes fields named `theta` or `q_star`.
+- Produces: `context_signature()`, `probe_signature()`, `render_history_episode()`, `render_task()`, `make_future_tasks()`, `MetaProbeEnvironment`.
+- `SurfaceView` may expose observable structural signatures but never exposes fields named `theta`, `q_star`, or `phi`.
 
 - [ ] **Step 1: Write failing task-family tests**
 
@@ -440,7 +439,7 @@ assert len(families["D1"]) == cfg.future_tasks_per_family
 assert all(t.family == "D1" for t in families["D1"])
 ```
 
-For paired D1/D2 indices, assert identical `(z, theta, q_star)` and different surface seeds. For D3, assert old `phi` before the change point and a deranged `phi_prime` afterward.
+For paired D1/D2 indices, assert identical `(z, theta, q_star)` and different surface seeds. For D3, assert old `phi` before `d3_change_after` and deranged `phi_prime` afterward.
 
 - [ ] **Step 2: Verify RED**
 
@@ -450,13 +449,11 @@ pytest tests/test_tasks.py -v
 
 Expected: import failure.
 
-- [ ] **Step 3: Implement future generation with domain-separated RNG**
+- [ ] **Step 3: Implement domain-separated future generation**
 
-Use SHA-256 stream labels `future-latent`, `future-d1-surface`, `future-d2-surface`, and `future-d3-surface`. Future `theta` values are uniform over `range(theta_count)` and independent of history generation. Construct `phi_prime` by a seeded cyclic offset in `1..q_count-1`, guaranteeing `phi_prime[z] != phi[z]` for every `z`.
+Use SHA-256 stream labels `future-latent`, `future-d1-surface`, `future-d2-surface`, and `future-d3-surface`. Future `theta` values are uniform over `range(theta_count)` and independent of history generation. Construct `phi_prime` by a seeded cyclic offset in `1..q_count-1`, so every context changes informative probe role.
 
-- [ ] **Step 4: Implement observable structural signatures**
-
-Define pure helpers:
+- [ ] **Step 4: Implement structural signatures and renderers**
 
 ```python
 def context_signature(z: int, width: int) -> tuple[int, ...]:
@@ -467,7 +464,9 @@ def probe_signature(q: int, width: int) -> tuple[int, ...]:
     return tuple(1 if i == q else 0 for i in range(width))
 ```
 
-These signatures are observable structure, not hidden state. D1 uses canonical surface tokens and canonical presentation order. D2 changes all context/probe token names and permutes the presentation order, while the structural signature remains attached to the corresponding visible item. Thus a literal token lookup fails, but a structural-role mapping can transfer.
+`render_history_episode()` returns a `SolvedHistoryView`: a D1-style `SurfaceView`, the observable informative probe signature, and resolved historical `theta`. This is the complete passive-history record given to agents.
+
+D1 uses canonical context/probe token names and canonical presentation order. D2 renames every context/probe token and permutes probe presentation order using its surface seed, while the structural signature stays attached to the corresponding visible item. Thus literal token reuse fails but structural-role reuse remains possible.
 
 - [ ] **Step 5: Write failing environment tests**
 
@@ -484,11 +483,11 @@ Assert the fifth probe raises `BudgetExceeded`.
 
 - [ ] **Step 6: Implement environment mechanics**
 
-Map observable probe signatures back to the unique structural role index. Only `q_star` returns `(informative=True, value=theta)`; all other probes return `(False, None)`. Each probe call consumes one budget unit, including repeated probes.
+Map observable probe signatures to unique structural roles. Only `q_star` returns `(informative=True, value=theta)`; other probes return `(False, None)`. Every probe consumes one budget unit, including repeats.
 
-- [ ] **Step 7: Add renderer-leakage tests**
+- [ ] **Step 7: Add leakage/shift tests**
 
-Assert serialized `SurfaceView` has no key named `theta`, `q_star`, or `phi`. Observable context/probe structural signatures are allowed and expected. Assert D2 tokens and presentation order differ from D1 while the set of structural signatures is exactly preserved.
+Assert serialized `SurfaceView` has no key named `theta`, `q_star`, or `phi`. Observable signatures are allowed. Assert D2 tokens and presentation order differ from D1 while the set of structural signatures is preserved exactly. Assert `render_history_episode()` reveals the informative observable role but not latent field names.
 
 - [ ] **Step 8: Verify GREEN and commit**
 
@@ -496,12 +495,12 @@ Assert serialized `SurfaceView` has no key named `theta`, `q_star`, or `phi`. Ob
 pytest tests/test_tasks.py tests/test_environment.py -v
 pytest -q
 git add src/aaa_v0/tasks.py src/aaa_v0/environment.py tests/test_tasks.py tests/test_environment.py
-git commit -m "feat: add AAA future task families"
+git commit -m "feat: add AAA task and rendering kernel"
 ```
 
 ---
 
-### Task 5: Passive-history rendering and the three reference controls
+### Task 5: Reference-agent protocol and three controls
 
 **Files:**
 - Create: `src/aaa_v0/agents.py`
@@ -509,12 +508,12 @@ git commit -m "feat: add AAA future task families"
 
 **Interfaces:**
 - Produces: `Agent` protocol, `LocalAgent`, `FixedMetaAgent`, `RevisingMetaAgent`.
-- Agent methods are exactly `observe_history(records)`, `start_task(view)`, `choose_probe()`, `observe_probe(observation)`, and `guess_theta()`.
-- `records` are `tuple[SolvedHistoryView, ...]`; agents never receive latent `z`, `q_star`, or `phi`.
+- Exact public methods: `observe_history(records)`, `start_task(view)`, `choose_probe()`, `observe_probe(observation)`, `guess_theta()`, `state_dict()`, `preferred_probe(context_signature)`.
+- `state_dict()` is JSON-safe and is the sole source for terminal agent-state hashing.
 
-- [ ] **Step 1: Write failing no-omniscience tests**
+- [ ] **Step 1: Write failing no-omniscience/interface tests**
 
-Use `inspect.signature` to verify no public agent method parameter is named `z`, `q_star`, `theta`, or `phi`. Verify passive-history records expose only `SurfaceView`, the informative probe's observable structural signature, and the resolved historical target.
+Use `inspect.signature` to verify no public method parameter is named `z`, `q_star`, `theta`, or `phi`. Verify `state_dict()` canonical serialization is deterministic.
 
 - [ ] **Step 2: Verify RED**
 
@@ -526,27 +525,28 @@ Expected: import failure.
 
 - [ ] **Step 3: Implement `LocalAgent`**
 
-Ignore history. For each future task, probe visible probe signatures in presentation order. Before observing an informative value, `guess_theta()` returns `0`; afterward it returns the observed value. No cross-task mapping persists.
+Ignore history. Probe visible signatures in presentation order. Before informative evidence, `guess_theta()` returns `0`; afterward it returns the observed value. `state_dict()` contains only name and current local state; no cross-task mapping persists.
 
 - [ ] **Step 4: Implement `FixedMetaAgent`**
 
-During history, learn `context_signature -> informative_probe_signature`. In future tasks, probe the learned signature first. If that probe is uninformative, search remaining visible signatures in presentation order so local task competence can still recover, but never change the stored cross-task mapping. This ensures D3 can separate recovery dynamics from final-score recovery.
+From passive history learn `context_signature -> informative_probe_signature`. Probe the learned signature first. After a mismatch, search remaining visible signatures so object-level competence can recover, but never modify the learned mapping. `preferred_probe()` always returns the frozen learned role.
 
 - [ ] **Step 5: Implement `RevisingMetaAgent`**
 
-Start with the same learned map. If the preferred first probe is uninformative, search remaining probes. When an informative probe is found, replace the stored mapping for that context signature with the newly informative probe signature. Subsequent tasks in that context use the revised mapping first.
+Start with the same learned map. After a preferred probe fails, search remaining roles. Once an informative role is found, replace that context's mapping. Subsequent tasks use the revised role first.
 
-- [ ] **Step 6: Add qualitative behavior tests**
+- [ ] **Step 6: Add behavior/state tests**
 
-Use hand-authored history and future views to prove:
+After the same D3 mismatch and local discovery:
 
 ```python
-assert local.mapping_size == 0
+assert local.preferred_probe(ctx) is None
 assert fixed.preferred_probe(ctx) == old_probe
 assert revising.preferred_probe(ctx) == new_probe
+assert sha256_json(fixed.state_dict()) != sha256_json(revising.state_dict())
 ```
 
-after both meta agents encounter the same D3 mismatch and discover the new informative role. `FixedMetaAgent` must still report `old_probe`; `RevisingMetaAgent` must report `new_probe`.
+Also assert `LocalAgent.state_dict()` is unchanged by two different passive histories after local state is reset.
 
 - [ ] **Step 7: Verify GREEN and commit**
 
@@ -567,11 +567,11 @@ git commit -m "feat: add AAA reference controls"
 
 **Interfaces:**
 - Produces: `LearningCurve`, `PairedCurve`, `RecoveryTrajectory`, `compute_learning_curve()`, `compute_paired_curve()`, `compute_recovery_trajectory()`.
-- This module computes observables only; it does not authorize C1–C4.
+- This module computes observables only; it authorizes no C1–C4 claim.
 
 - [ ] **Step 1: Write failing curve tests**
 
-Create hand-authored `TrialRecord`s for two tasks at budgets `0,1,2`. Include two examples with equal final competence but different intermediate geometry. Assert exact treatment, control, and delta points.
+Create hand-authored `TrialRecord`s for two tasks at budgets `0,1,2`, including two cases with equal final competence but different intermediate geometry. Assert exact treatment, control, and delta points.
 
 - [ ] **Step 2: Verify RED**
 
@@ -607,11 +607,11 @@ class RecoveryTrajectory:
     cumulative_post_change_evidence: tuple[int, ...]
 ```
 
-Compute competence as mean `correct` at each budget. Compute secondary AUC by trapezoidal integration across the integer budget grid.
+Competence is mean `correct` at each budget. Secondary AUC uses trapezoidal integration on the integer budget grid.
 
 - [ ] **Step 4: Add D3 semantic regression test**
 
-Construct brittle and revising records with the same eventual competence but different first-probe old-rule adherence. Assert their `RecoveryTrajectory` values differ. This prevents D3 from collapsing into a final-score test.
+Construct brittle and revising treatment-arm records with equal eventual competence but different first-probe old-rule adherence. Assert their recovery trajectories differ. D3 recovery is computed from the history-exposed/treatment agent relative to its pre-change learned mapping; the H0 arm remains recorded as a descriptive control but does not define the recovery criterion.
 
 - [ ] **Step 5: Verify GREEN and commit**
 
@@ -624,7 +624,7 @@ git commit -m "feat: measure paired AAA learning dynamics"
 
 ---
 
-### Task 7: Protocol runner, zero-budget matching, and hard stops
+### Task 7: Protocol runner, per-family matching, and hard stops
 
 **Files:**
 - Create: `src/aaa_v0/runner.py`
@@ -635,13 +635,15 @@ git commit -m "feat: measure paired AAA learning dynamics"
 
 - [ ] **Step 1: Write failing match-gate tests**
 
+`MatchReport` records zero-budget treatment/control competence and absolute delta separately for D1, D2, and D3. All families must pass the same supplied tolerance.
+
 ```python
 with pytest.raises(ProtocolStop) as exc:
-    assert_match_gate(treatment=0.75, control=0.50, tolerance=0.10)
+    assert_match_gate({"D1": 0.25, "D2": 0.0, "D3": 0.0}, tolerance=0.10)
 assert exc.value.code == "MATCH_FAILURE"
 ```
 
-Also assert `0.50` versus `0.50` passes at tolerance `0.0`.
+A report with every family delta `0.0` passes at tolerance `0.0`.
 
 - [ ] **Step 2: Verify RED**
 
@@ -651,19 +653,21 @@ pytest tests/test_runner.py -v
 
 Expected: import failure.
 
-- [ ] **Step 3: Implement paired future stepping**
+- [ ] **Step 3: Implement history exposure and terminal freeze**
 
-For each shared latent task: render equivalent copies, call both agents' guesses at `b=0`, record them, then for budgets `1..B` allow exactly one probe per condition per budget step and record the new guess. One condition never receives extra probes or retries.
+Render each `HistoryEpisode` into `SolvedHistoryView`; expose H+ only to the treatment agent and H0 only to the control agent. Compute treatment/control terminal state hashes exclusively from `sha256_json(agent.state_dict())`. Freeze those hashes, history pair hash, config hash, and future-seed commitment before future reveal.
 
-For each `TrialRecord.old_rule_adherence`, compare the first chosen probe signature on that task with the pre-D3 mapping recorded at the terminal boundary. Use `None` for D1/D2.
+- [ ] **Step 4: Implement paired future stepping**
 
-- [ ] **Step 4: Implement matching as a pre-interpretation gate**
+For each shared latent task, render equivalent copies, call both agents at `b=0`, then allow exactly one probe per condition per budget step `1..B`. Record the first chosen probe signature on every task. `old_rule_adherence` compares the treatment agent's first D3 probe with the pre-change terminal preferred probe for that context; D1/D2 use `None`.
 
-Compute declared `b=0` competence separately for each condition and compare with an explicit tolerance passed into the runner. On failure raise `ProtocolStop("MATCH_FAILURE")` before transfer/recovery rule evaluation.
+- [ ] **Step 5: Implement matching before rule evaluation**
 
-- [ ] **Step 5: Implement custody-rich `RunBundle`**
+Compute `b=0` competence separately by D1/D2/D3. If any family exceeds tolerance, raise `ProtocolStop("MATCH_FAILURE")` before transfer/recovery evaluation.
 
-The serialized bundle includes exactly named top-level fields:
+- [ ] **Step 6: Implement custody-rich `RunBundle`**
+
+Top-level serialized fields are:
 
 ```text
 config_hash
@@ -673,19 +677,21 @@ terminal_snapshot_hash
 future_seed_commitment
 future_seed_reveal_hash
 raw_trial_records_hash
+match_report
 d1_paired_curve
 d2_paired_curve
-d3_recovery_trajectory
+d3_treatment_recovery
+d3_control_curve
 protocol_status
 ```
 
 No field is named `aaa_score`, `intelligence`, or `self_improvement`.
 
-- [ ] **Step 6: Add deterministic end-to-end software test**
+- [ ] **Step 7: Add deterministic end-to-end software tests**
 
-Run identical reference-agent/config/history/future seeds twice and assert byte-identical `RunBundle` canonical serialization. Change only the future seed; history/config/terminal commitment fields stay stable while future record hashes change.
+Identical config/history/future seeds and agent classes produce byte-identical `RunBundle` serialization. Changing only future seed leaves history/config state hashes unchanged and changes future record hashes. An intentionally failed balance report prevents terminal exposure; an intentionally failed match report prevents rule evaluation.
 
-- [ ] **Step 7: Verify GREEN and commit**
+- [ ] **Step 8: Verify GREEN and commit**
 
 ```bash
 pytest tests/test_runner.py -v
@@ -704,11 +710,11 @@ git commit -m "feat: add AAA protocol runner and stop gates"
 
 **Interfaces:**
 - Produces: `TransferRule`, `RecoveryRule`, `ExploratoryCalibrationReport`, `Preregistration`, `ConfirmatoryControlReport`, `freeze_preregistration()`, `validate_confirmatory_controls()`.
-- The implementation provides the mechanism; this phase does not perform the scientific preregistration freeze or confirmatory run.
+- This task implements machinery only; it does not perform the scientific preregistration freeze or confirmatory run.
 
 - [ ] **Step 1: Write failing preregistration identity tests**
 
-Assert canonical JSON round-trip stability, SHA-256 identity stability, and rejection when any confirmatory seed is also present in the exploratory seed set.
+Assert canonical JSON round-trip stability, SHA-256 identity stability, and rejection when any confirmatory seed identity appears in the exploratory set.
 
 - [ ] **Step 2: Verify RED**
 
@@ -718,7 +724,7 @@ pytest tests/test_prereg.py -v
 
 Expected: import failure.
 
-- [ ] **Step 3: Implement explicit rule dataclasses**
+- [ ] **Step 3: Implement explicit frozen-rule shapes**
 
 ```python
 @dataclass(frozen=True)
@@ -738,6 +744,7 @@ class RecoveryRule:
 @dataclass(frozen=True)
 class Preregistration:
     config: AssayConfig
+    sequence_balance_rule: SequenceBalanceRule
     d1_rule: TransferRule
     d2_rule: TransferRule
     d3_rule: RecoveryRule
@@ -751,17 +758,15 @@ class Preregistration:
 
 - [ ] **Step 4: Implement exploratory-report semantics**
 
-`ExploratoryCalibrationReport.to_dict()` includes:
-
 ```json
 {"status":"EXPLORATORY_UNSCORED","next_phase_gate_passed":false,"aaa_evidence":"NONE"}
 ```
 
-It records raw control curves, recovery trajectories, and proposed rule values supplied by the caller. It emits no C1–C4 claim.
+The report records raw curves/recovery, balance diagnostics, and caller-supplied candidate rules. It emits no C1–C4 claim.
 
 - [ ] **Step 5: Implement confirmatory signature gate**
 
-Apply the frozen rules to fresh `LOCAL`, `FIXED_META`, and `REVISING_META` bundles and require:
+Apply the frozen rules to fresh reference-control bundles and require exactly:
 
 ```text
                D1   D2   D3
@@ -770,23 +775,23 @@ FIXED_META      +    +    -
 REVISING_META   +    +    +
 ```
 
-D3 uses only `RecoveryRule`. On any cell mismatch return:
+D1/D2 signs use `TransferRule`; D3 signs use the treatment-arm `RecoveryTrajectory` and `RecoveryRule` only. On any failed balance/custody/match/signature cell:
 
 ```json
 {"status":"CONTROL_MISMATCH","next_phase_gate_passed":false,"aaa_evidence":"NONE"}
 ```
 
-If every balance, custody, match, and signature check succeeds, return:
+On full success:
 
 ```json
 {"status":"CONTROL_VALIDATED","next_phase_gate_passed":true,"aaa_evidence":"NONE"}
 ```
 
-`next_phase_gate_passed` means only that a separately approved frontier-execution protocol may be designed or invoked later. It does not authorize empirical interpretation by itself.
+The gate means only that a separately approved frontier protocol may proceed later.
 
-- [ ] **Step 6: Add anti-tuning tests**
+- [ ] **Step 6: Add anti-tuning/provenance tests**
 
-Reject confirmatory bundles when exploratory/confirmatory seed identities overlap, `spec_commit` differs, config hashes differ, or any bundle has a failed balance/match/custody status.
+Reject confirmatory bundles when exploratory/confirmatory seed identities overlap, `spec_commit` differs, config hashes differ, sequence-balance rules differ, or any lower gate failed.
 
 - [ ] **Step 7: Verify GREEN and commit**
 
@@ -807,7 +812,7 @@ git commit -m "feat: add AAA preregistration and control validation"
 
 **Interfaces:**
 - Allowed subcommands: `audit-history`, `calibrate-controls`, `freeze-prereg`, `validate-controls`.
-- A frontier/model execution subcommand is forbidden in this implementation.
+- Frontier/model execution commands are forbidden.
 
 - [ ] **Step 1: Write failing CLI-surface tests**
 
@@ -823,15 +828,15 @@ Expected: subprocess/import failure.
 
 - [ ] **Step 3: Implement `audit-history`**
 
-Arguments: config JSON path and history seed. Write canonical JSON containing config hash, history pair hash, treatment/control MI, named balance fields, and `status` equal to `BALANCED` or `BALANCE_FAILURE`. Exit nonzero on failure.
+Arguments: config JSON, sequence-balance-rule JSON, history seed. Write canonical JSON with config/history hashes, treatment/control MI, sequence diagnostics, named balance fields, and status `BALANCED` or `BALANCE_FAILURE`. Exit nonzero on failure.
 
 - [ ] **Step 4: Implement `calibrate-controls`**
 
-Arguments: config JSON, explicit exploratory history seed list, explicit exploratory future seed list, output directory. Run only the three reference agents. Write raw JSONL records plus `exploratory_calibration.json` with status `EXPLORATORY_UNSCORED` and `aaa_evidence = NONE`.
+Arguments: config JSON, candidate sequence-balance-rule JSON, explicit exploratory history/future seed lists, output directory. Run only reference controls. Write raw JSONL plus `exploratory_calibration.json` with `EXPLORATORY_UNSCORED` and `aaa_evidence = NONE`.
 
 - [ ] **Step 5: Implement `freeze-prereg` as a mechanical writer**
 
-Arguments: exploratory report, explicit decision-rules JSON, explicit disjoint confirmatory seed lists. Validate disjointness; write `preregistration.json` and `preregistration.sha256`. The command never invents threshold values; every threshold comes from the supplied decision-rules JSON.
+Arguments: exploratory report, explicit decision-rules JSON containing sequence/D1/D2/D3 rules, explicit disjoint confirmatory seed lists. Validate disjointness and write `preregistration.json` plus `preregistration.sha256`. The command never invents threshold values.
 
 - [ ] **Step 6: Implement `validate-controls`**
 
@@ -839,7 +844,7 @@ Arguments: frozen preregistration and output directory. Run fresh confirmatory r
 
 - [ ] **Step 7: Add manifest-integrity tests**
 
-Every output directory gets `MANIFEST.json` mapping relative file paths to SHA-256. Identical inputs produce identical hashes. Confirmatory output includes the preregistration hash.
+Every output directory gets `MANIFEST.json` mapping relative paths to SHA-256. Identical inputs produce identical hashes. Confirmatory output contains the preregistration hash.
 
 - [ ] **Step 8: Run complete automated verification**
 
@@ -857,7 +862,7 @@ grep -R "OpenAI\|Anthropic\|Gemini" -n src/aaa_v0 tests || true
 grep -R "aaa_score\|self_improvement" -n src/aaa_v0 tests || true
 ```
 
-Expected: no provider integration and no scalar `aaa_score` or `self_improvement` output field. A match inside a negative test assertion is permitted only when the test is explicitly proving that the name is absent from produced output.
+Expected: no provider integration and no scalar `aaa_score`/`self_improvement` output field. A match inside a negative test assertion is allowed only when that test proves the name is absent from produced output.
 
 - [ ] **Step 10: Commit**
 
@@ -870,13 +875,14 @@ git commit -m "feat: add AAA offline assay workflow"
 
 ## Final implementation gate
 
-After Task 9, do not calibrate scientifically and do not run a frontier model. Run fresh verification and create `IMPLEMENTATION_STATE.json` from actual repository/runtime values. The writer must obtain the implementation SHA with `git rev-parse HEAD` and record these fixed provenance fields:
+After Task 9, do not calibrate scientifically and do not run a frontier model. Run fresh verification and create `IMPLEMENTATION_STATE.json` from actual repository/runtime values. `implementation_head` is populated by the implementation script from `git rev-parse HEAD`, never copied manually from this plan.
+
+Required fixed fields:
 
 ```json
 {
   "concept_commit": "45061c6ea30edf4c16833c3deca0b13c2d98bb8f",
   "assay_design_commit": "04f0f4380d4fad01386c1f61e95a1e65c24f8de0",
-  "implementation_head": "value returned by git rev-parse HEAD",
   "history_balance": "VERIFIED_ON_TEST_FIXTURES_ONLY",
   "seed_boundary": "VERIFIED_ON_TEST_FIXTURES_ONLY",
   "reference_controls": "SOFTWARE_VALIDATED_ONLY",
@@ -887,20 +893,20 @@ After Task 9, do not calibrate scientifically and do not run a frontier model. R
 }
 ```
 
-The `implementation_head` string is populated programmatically at verification time, not manually copied from this plan. Add exact pytest pass/fail counts under a `unit_tests` object generated from that verification run.
+The generated record additionally contains `implementation_head` from Git and exact pytest pass/fail counts under `unit_tests`.
 
-`SOFTWARE_VALIDATED_ONLY` means deterministic tests exercise the intended code paths. It is not exploratory calibration and not the confirmatory scientific control gate.
+`SOFTWARE_VALIDATED_ONLY` means deterministic tests exercise intended code paths. It is neither exploratory calibration nor the confirmatory scientific control gate.
 
-If any automated test, balance audit, seed-boundary check, deterministic custody check, or scope-leak check fails, stop and repair the implementation before any later calibration action.
+If any automated test, balance audit, sequence-balance check, seed-boundary check, custody check, or scope-leak check fails, stop and repair implementation before any later calibration action.
 
 ## Explicitly outside this plan
 
-The following require later explicit approval and remain absent from this implementation phase:
+The following require later explicit approval:
 
-- a frontier-model/provider adapter;
+- frontier-model/provider adapters;
 - a frontier-model prompt protocol;
 - exploratory tuning using frontier-model behavior;
-- the scientific act of freezing the official AAA-v0 preregistration thresholds;
+- scientifically freezing official AAA-v0 thresholds/rules;
 - confirmatory scientific control execution;
 - frontier-model execution;
 - C1/C2/C3/C4 interpretation for a frontier model;
